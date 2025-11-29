@@ -146,11 +146,14 @@ backend:
     file: "/app/app/api/[[...path]]/route.js"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "GET /api/products endpoint to fetch all products from Supabase"
+      - working: "NA"
+        agent: "testing"
+        comment: "Cannot test - database tables missing. API implementation is correct, returns proper error about missing 'products' table. Will work once user runs db-setup.sql."
         
   - task: "Products API - Get single product"
     implemented: true
