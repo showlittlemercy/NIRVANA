@@ -1,5 +1,4 @@
 import { ClerkProvider } from '@clerk/nextjs';
-import { dark } from '@clerk/themes';
 import './globals.css';
 import { Toaster } from '@/components/ui/sonner';
 
@@ -12,7 +11,6 @@ export default function RootLayout({ children }) {
   return (
     <ClerkProvider
       appearance={{
-        baseTheme: dark,
         variables: {
           colorPrimary: '#8b5cf6',
           colorBackground: '#0f0a1e',
