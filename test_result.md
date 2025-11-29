@@ -127,15 +127,18 @@ backend:
         
   - task: "Supabase Database Setup"
     implemented: true
-    working: "NA"
+    working: false
     file: "/app/lib/supabase.js, /app/lib/db-setup.sql"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: "NA"
         agent: "main"
         comment: "Created Supabase client and SQL setup file with tables for products, orders, cart, and order_items"
+      - working: false
+        agent: "testing"
+        comment: "Database tables not created yet. User must run SQL from /app/lib/db-setup.sql in Supabase SQL editor. Supabase client configuration is correct."
         
   - task: "Products API - Get all products"
     implemented: true
