@@ -9,27 +9,54 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
 export default function AdminDashboard() {
-  const { user } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
   const router = useRouter();
+
   const [stats, setStats] = useState({
     totalProducts: 0,
     totalOrders: 0,
     totalCustomers: 0,
   });
 
+  const [loadingStats, setLoadingStats] = useState(false);
+
+  // Client-side guard: if user is loaded and not admin, redirect away
   useEffect(() => {
-    if (user) {
+    if (!isLoaded) return;
+
+    // If not signed in, send to sign-in page (Clerk handles the UI)
+    if (!isSignedIn) {
+      router.push('/sign-in');
+      return;
+    }
+
+    const role = user?.publicMetadata?.role || user?.privateMetadata?.role || null;
+
+    if (role !== 'admin') {
+      // Not an admin -> redirect to home
+      router.push('/');
+    } else {
+      // If admin, fetch stats
       fetchStats();
     }
-  }, [user]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isLoaded, isSignedIn, user]);
 
   const fetchStats = async () => {
+    setLoadingStats(true);
     try {
+      // include credentials so cookies are sent for Clerk auth
       const [productsRes, ordersRes, customersRes] = await Promise.all([
-        fetch('/api/products'),
-        fetch('/api/admin/orders'),
-        fetch('/api/admin/customers'),
+        fetch('/api/products', { credentials: 'same-origin' }),
+        fetch('/api/admin/orders', { credentials: 'same-origin' }),
+        fetch('/api/admin/customers', { credentials: 'same-origin' }),
       ]);
+
+      // If admin endpoints return 401, redirect to sign-in or home
+      if (ordersRes.status === 401 || customersRes.status === 401) {
+        router.push('/sign-in');
+        return;
+      }
 
       const [productsData, ordersData, customersData] = await Promise.all([
         productsRes.json(),
@@ -38,14 +65,25 @@ export default function AdminDashboard() {
       ]);
 
       setStats({
-        totalProducts: productsData.success ? productsData.products.length : 0,
-        totalOrders: ordersData.success ? ordersData.orders.length : 0,
-        totalCustomers: customersData.success ? customersData.customers.length : 0,
+        totalProducts: productsData.success ? (productsData.products?.length ?? 0) : 0,
+        totalOrders: ordersData.success ? (ordersData.orders?.length ?? 0) : 0,
+        totalCustomers: customersData.success ? (customersData.customers?.length ?? 0) : 0,
       });
     } catch (error) {
-      console.error('Failed to fetch stats');
+      console.error('Failed to fetch stats', error);
+    } finally {
+      setLoadingStats(false);
     }
   };
+
+  // Render a simple loading screen while Clerk user is loading or while stats load
+  if (!isLoaded || loadingStats) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center text-gray-300">Loading admin dashboard...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen py-8">

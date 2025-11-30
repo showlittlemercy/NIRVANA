@@ -15,20 +15,38 @@ export default function CartPage() {
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
 
+  // Checkout form state
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cod'); // only COD for now
+  const [placingOrder, setPlacingOrder] = useState(false);
+
   useEffect(() => {
     if (user) {
+      // prefill name/email if available
+      if (user?.fullName) setName(user.fullName);
+      fetchCart();
+    } else {
+      // still try to fetch (maybe session exists)
       fetchCart();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchCart = async () => {
+    setLoading(true);
     try {
       const response = await fetch('/api/cart');
       const data = await response.json();
       if (data.success) {
-        setCartItems(data.items);
+        setCartItems(data.items || []);
+      } else {
+        // it's fine to show an empty cart if unauthorized or no items
+        setCartItems([]);
       }
     } catch (error) {
+      console.error('fetchCart error', error);
       toast.error('Failed to load cart');
     } finally {
       setLoading(false);
@@ -36,6 +54,7 @@ export default function CartPage() {
   };
 
   const updateQuantity = async (itemId, newQuantity) => {
+    if (newQuantity < 1) return;
     try {
       const response = await fetch(`/api/cart/${itemId}`, {
         method: 'PATCH',
@@ -46,8 +65,11 @@ export default function CartPage() {
       const data = await response.json();
       if (data.success) {
         fetchCart();
+      } else {
+        toast.error(data.error || 'Failed to update quantity');
       }
     } catch (error) {
+      console.error('updateQuantity error', error);
       toast.error('Failed to update quantity');
     }
   };
@@ -62,8 +84,11 @@ export default function CartPage() {
       if (data.success) {
         toast.success('Item removed from cart');
         fetchCart();
+      } else {
+        toast.error(data.error || 'Failed to remove item');
       }
     } catch (error) {
+      console.error('removeItem error', error);
       toast.error('Failed to remove item');
     }
   };
@@ -72,6 +97,60 @@ export default function CartPage() {
     (sum, item) => sum + (item.products?.price || 0) * item.quantity,
     0
   );
+
+  const validateOrder = () => {
+    if (!name.trim()) return 'Please enter your full name';
+    if (!phone.trim()) return 'Please enter your phone number';
+    if (!address.trim()) return 'Please enter your shipping address';
+    if (!cartItems || cartItems.length === 0) return 'Your cart is empty';
+    return null;
+  };
+
+  const placeOrder = async () => {
+    const validationError = validateOrder();
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+
+    setPlacingOrder(true);
+    try {
+      const payload = {
+        items: cartItems,
+        shippingAddress: address,
+        phone,
+        userName: name,
+        userEmail: user?.emailAddresses?.[0]?.emailAddress || user?.email || '',
+        paymentMethod, // currently 'cod'—server can ignore or store if schema changed
+      };
+
+      const res = await fetch('/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      const json = await res.json();
+      if (!res.ok) {
+        console.error('placeOrder error response:', json);
+        toast.error(json?.error || 'Failed to place order');
+        setPlacingOrder(false);
+        return;
+      }
+
+      toast.success('Order placed successfully — Cash on Delivery selected.');
+      // Refresh cart (server-side clears it)
+      await fetchCart();
+
+      // Optionally navigate to orders page or show confirmation modal
+      router.push('/orders');
+    } catch (err) {
+      console.error('placeOrder exception', err);
+      toast.error('Failed to place order');
+    } finally {
+      setPlacingOrder(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -187,18 +266,75 @@ export default function CartPage() {
                     <span>Shipping</span>
                     <span>Free</span>
                   </div>
-                  <div className="border-t border-purple-500/30 pt-4">
-                    <div className="flex justify-between text-xl font-bold">
-                      <span>Total</span>
-                      <span className="text-purple-400">${total.toFixed(2)}</span>
+
+                  {/* CHECKOUT FORM */}
+                  <div className="pt-4">
+                    <label className="block text-sm text-gray-300 mb-1">Full name</label>
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full rounded-md bg-gray-900 border border-gray-800 px-3 py-2 text-gray-100 focus:outline-none mb-3"
+                      placeholder="Your full name"
+                    />
+
+                    <label className="block text-sm text-gray-300 mb-1">Phone number</label>
+                    <input
+                      value={phone}
+                      onChange={(e) => setPhone(e.target.value)}
+                      className="w-full rounded-md bg-gray-900 border border-gray-800 px-3 py-2 text-gray-100 focus:outline-none mb-3"
+                      placeholder="Enter phone number"
+                    />
+
+                    <label className="block text-sm text-gray-300 mb-1">Shipping address</label>
+                    <textarea
+                      value={address}
+                      onChange={(e) => setAddress(e.target.value)}
+                      className="w-full rounded-md bg-gray-900 border border-gray-800 px-3 py-2 text-gray-100 focus:outline-none mb-3"
+                      rows={4}
+                      placeholder="House no, street, city, postcode"
+                    />
+
+                    <label className="block text-sm text-gray-300 mb-2">Payment method</label>
+                    <div className="flex items-center gap-3 mb-4">
+                      <label className="inline-flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="payment"
+                          checked={paymentMethod === 'cod'}
+                          onChange={() => setPaymentMethod('cod')}
+                          className="form-radio text-indigo-500"
+                        />
+                        <span className="text-sm text-gray-200">Cash on Delivery</span>
+                      </label>
+                      {/* add more methods later if needed */}
+                    </div>
+
+                    <div className="border-t border-purple-500/30 pt-4">
+                      <div className="flex justify-between text-xl font-bold">
+                        <span>Total</span>
+                        <span className="text-purple-400">${total.toFixed(2)}</span>
+                      </div>
+
+                      <div className="mt-3 space-y-2">
+                        <Button
+                          className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
+                          onClick={placeOrder}
+                          disabled={placingOrder}
+                        >
+                          {placingOrder ? 'Placing order…' : 'Place Order (COD)'}
+                        </Button>
+
+                        <Button
+                          variant="outline"
+                          className="w-full border-purple-500 text-purple-400 hover:bg-purple-500/20"
+                          onClick={() => router.push('/checkout')}
+                        >
+                          Continue to Shipping Options
+                        </Button>
+                      </div>
                     </div>
                   </div>
-                  <Button
-                    className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
-                    onClick={() => router.push('/checkout')}
-                  >
-                    Proceed to Checkout
-                  </Button>
+                  {/* END CHECKOUT FORM */}
                 </CardContent>
               </Card>
             </div>

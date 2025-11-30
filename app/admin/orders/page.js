@@ -11,20 +11,55 @@ import { toast } from 'sonner';
 export default function AdminOrdersPage() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     fetchOrders();
   }, []);
 
   const fetchOrders = async () => {
+    setLoading(true);
+    setError(null);
     try {
       const response = await fetch('/api/admin/orders');
-      const data = await response.json();
-      if (data.success) {
-        setOrders(data.orders);
+      console.log('Raw response (admin/orders):', response);
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        console.error('Failed to parse JSON from /api/admin/orders', jsonErr);
+        setError('Invalid JSON response from server');
+        setOrders([]);
+        return;
       }
-    } catch (error) {
-      toast.error('Failed to load orders');
+      console.log('Parsed JSON (admin/orders):', data);
+
+      if (!response.ok) {
+        // HTTP error (401, 500, etc.)
+        const msg = data?.error || `HTTP ${response.status} ${response.statusText}`;
+        setError(msg);
+        setOrders([]);
+        return;
+      }
+
+      if (!data) {
+        setError('Empty response from server');
+        setOrders([]);
+        return;
+      }
+
+      if (data.success === false) {
+        setError(data.error || 'Server returned success: false');
+        setOrders([]);
+        return;
+      }
+
+      // Success path
+      setOrders(Array.isArray(data.orders) ? data.orders : []);
+    } catch (err) {
+      console.error('Fetch /api/admin/orders error:', err);
+      setError(String(err));
+      setOrders([]);
     } finally {
       setLoading(false);
     }
@@ -34,6 +69,56 @@ export default function AdminOrdersPage() {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-purple-500"></div>
+      </div>
+    );
+  }
+
+  // Show explicit error card so you can see what's wrong without hunting in DevTools
+  if (error) {
+    return (
+      <div className="min-h-screen py-8">
+        <div className="container mx-auto px-4">
+          <div className="mb-6">
+            <Link href="/admin">
+              <Button variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/20">
+                <ArrowLeft className="w-4 h-4 mr-2" />
+                Back to Dashboard
+              </Button>
+            </Link>
+          </div>
+
+          <h1 className="text-4xl font-bold mb-8 bg-gradient-to-r from-purple-400 to-blue-400 bg-clip-text text-transparent">
+            All Orders
+          </h1>
+
+          <Card className="bg-gradient-to-br from-purple-950/50 to-blue-950/50 border-red-500/30">
+            <CardHeader>
+              <CardTitle className="text-red-400">Failed to load orders</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-gray-300 mb-4">
+                {error}
+              </p>
+              <div className="flex gap-2">
+                <Button onClick={fetchOrders} className="bg-gradient-to-r from-purple-600 to-blue-600">
+                  Retry
+                </Button>
+                <Button
+                  variant="ghost"
+                  onClick={() => {
+                    // open debug endpoints in a new tab (helpful when testing locally)
+                    window.open('/api/_debug/supabase', '_blank');
+                  }}
+                >
+                  Open debug endpoint
+                </Button>
+              </div>
+              <p className="text-xs text-gray-400 mt-3">
+                Tip: if the error mentions missing SUPABASE_SERVICE_ROLE_KEY or "Unauthorized", ensure your server env vars are set and your admin API uses the server-side supabase admin client.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }

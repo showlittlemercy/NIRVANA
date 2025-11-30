@@ -1,36 +1,46 @@
-'use client';
+"use client";
 
-import { useEffect, useState } from 'react';
-import { useUser, SignInButton, UserButton } from '@clerk/nextjs';
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ShoppingCart, Package, User, Plus, Minus } from 'lucide-react';
-import Link from 'next/link';
-import { toast } from 'sonner';
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { useUser, SignInButton, UserButton } from "@clerk/nextjs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ShoppingCart, Package, User, Plus } from "lucide-react";
+import Link from "next/link";
+import { toast } from "sonner";
 
 export default function HomePage() {
+  const router = useRouter();
   const { user, isLoaded } = useUser();
   const [products, setProducts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [cartCount, setCartCount] = useState(0);
-  const isAdmin = user?.publicMetadata?.role === 'admin';
+  const isAdmin = user?.publicMetadata?.role === "admin";
 
   useEffect(() => {
     fetchProducts();
     if (user) {
       fetchCartCount();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchProducts = async () => {
     try {
-      const response = await fetch('/api/products');
+      const response = await fetch("/api/products");
       const data = await response.json();
       if (data.success) {
         setProducts(data.products);
       }
     } catch (error) {
-      toast.error('Failed to load products');
+      toast.error("Failed to load products");
     } finally {
       setLoading(false);
     }
@@ -38,45 +48,45 @@ export default function HomePage() {
 
   const fetchCartCount = async () => {
     try {
-      const response = await fetch('/api/cart');
+      const response = await fetch("/api/cart");
       const data = await response.json();
       if (data.success) {
         setCartCount(data.items.length);
       }
     } catch (error) {
-      console.error('Failed to fetch cart count');
+      console.error("Failed to fetch cart count");
     }
   };
 
   const addToCart = async (productId) => {
     if (!user) {
-      toast.error('Please sign in to add items to cart');
+      toast.error("Please sign in to add items to cart");
       return;
     }
 
     try {
-      const response = await fetch('/api/cart', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+      const response = await fetch("/api/cart", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ productId, quantity: 1 }),
       });
 
       const data = await response.json();
       if (data.success) {
-        toast.success('Added to cart!');
+        toast.success("Added to cart!");
         fetchCartCount();
       } else {
-        toast.error(data.error || 'Failed to add to cart');
+        toast.error(data.error || "Failed to add to cart");
       }
     } catch (error) {
-      toast.error('Failed to add to cart');
+      toast.error("Failed to add to cart");
     }
   };
 
   return (
     <div className="min-h-screen">
       {/* Navigation */}
-      <nav className="sticky top-0 z-50 backdrop-blur-lg bg-black/30 border-b border-purple-500/20">
+      <nav className="fixed top-0 left-0 w-full z-50 backdrop-blur-lg bg-black/30 border-b border-purple-500/20">
         <div className="container mx-auto px-4 py-4">
           <div className="flex items-center justify-between">
             <Link href="/" className="flex items-center space-x-2">
@@ -92,20 +102,63 @@ export default function HomePage() {
               {isLoaded && user ? (
                 <>
                   {isAdmin && (
-                    <Link href="/admin">
-                      <Button variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/20">
-                        <User className="w-4 h-4 mr-2" />
-                        Admin Panel
-                      </Button>
-                    </Link>
+                    <Button
+                      aria-label="Admin Panel"
+                      onMouseDown={() => console.log("Admin mouseDown")}
+                      onClick={async () => {
+                        console.log(
+                          "Admin clicked — about to navigate (router.push)"
+                        );
+                        try {
+                          // attempt client-side navigation first
+                          await router.push("/admin");
+                        } catch (err) {
+                          console.warn("router.push threw", err);
+                        }
+
+                        // small delay, then check if location changed; if not, do hard navigation
+                        setTimeout(() => {
+                          console.log(
+                            "current location after push:",
+                            window.location.href
+                          );
+                          if (!window.location.href.includes("/admin")) {
+                            console.log(
+                              "router.push did not navigate — forcing full reload via window.location"
+                            );
+                            window.location.href = "/admin";
+                          } else {
+                            console.log("router.push worked");
+                          }
+                        }, 200);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          console.log("Admin enter key");
+                          window.location.href = "/admin";
+                        }
+                      }}
+                      variant="outline"
+                      className="border-purple-500 text-purple-400 hover:bg-purple-500/20"
+                    >
+                      <User className="w-4 h-4 mr-2" />
+                      Admin Panel
+                    </Button>
                   )}
+
                   <Link href="/orders">
-                    <Button variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/20">
+                    <Button
+                      variant="outline"
+                      className="border-purple-500 text-purple-400 hover:bg-purple-500/20"
+                    >
                       My Orders
                     </Button>
                   </Link>
                   <Link href="/cart">
-                    <Button variant="outline" className="border-purple-500 text-purple-400 hover:bg-purple-500/20 relative">
+                    <Button
+                      variant="outline"
+                      className="border-purple-500 text-purple-400 hover:bg-purple-500/20 relative"
+                    >
                       <ShoppingCart className="w-4 h-4 mr-2" />
                       Cart
                       {cartCount > 0 && (
@@ -129,13 +182,15 @@ export default function HomePage() {
         </div>
       </nav>
 
-      {/* Hero Section */}
-      <div className="container mx-auto px-4 py-16">
+      {/* Hero Section (moved down with padding-top) */}
+      <div className="container mx-auto px-4 pt-20">
         <div className="text-center mb-16 space-y-4">
           <h1 className="text-6xl font-bold bg-gradient-to-r from-purple-400 via-blue-400 to-purple-400 bg-clip-text text-transparent animate-pulse">
             Welcome to Nirvana
           </h1>
-          <p className="text-xl text-gray-400">Discover premium products for your lifestyle</p>
+          <p className="text-xl text-gray-400">
+            Discover premium products for your lifestyle
+          </p>
         </div>
 
         {/* Products Grid */}
@@ -161,18 +216,27 @@ export default function HomePage() {
                   </div>
                 </CardHeader>
                 <CardContent className="p-4">
-                  <CardTitle className="text-lg mb-2 text-purple-300">{product.name}</CardTitle>
+                  <CardTitle className="text-lg mb-2 text-purple-300">
+                    {product.name}
+                  </CardTitle>
                   <CardDescription className="text-gray-400 text-sm mb-4">
                     {product.description?.substring(0, 80)}...
                   </CardDescription>
                   <div className="flex items-center justify-between">
-                    <span className="text-2xl font-bold text-purple-400">${product.price}</span>
-                    <span className="text-sm text-gray-500">{product.stock} in stock</span>
+                    <span className="text-2xl font-bold text-purple-400">
+                      ${product.price}
+                    </span>
+                    <span className="text-sm text-gray-500">
+                      {product.stock} in stock
+                    </span>
                   </div>
                 </CardContent>
                 <CardFooter className="p-4 pt-0 flex gap-2">
                   <Link href={`/product/${product.id}`} className="flex-1">
-                    <Button variant="outline" className="w-full border-purple-500 text-purple-400 hover:bg-purple-500/20">
+                    <Button
+                      variant="outline"
+                      className="w-full border-purple-500 text-purple-400 hover:bg-purple-500/20"
+                    >
                       View Details
                     </Button>
                   </Link>
@@ -198,7 +262,8 @@ export default function HomePage() {
               © 2024 Nirvana E-commerce. All rights reserved.
             </p>
             <p className="text-xs mt-2 text-purple-400">
-              Created with ❤️ by <span className="font-semibold">Priyanshu</span>
+              Created with ❤️ by{" "}
+              <span className="font-semibold">Priyanshu</span>
             </p>
           </div>
         </div>
